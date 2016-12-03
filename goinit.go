@@ -26,7 +26,16 @@ func NewLoader(status interface{}) *Loader {
 
 func (l *Loader) actionName(act interface{}) string {
 	name := runtime.FuncForPC(reflect.ValueOf(act).Pointer()).Name()
-	i := strings.LastIndexByte(name, '.')
+	i := strings.LastIndexByte(name, '-')
+	if i >= 0 {
+		name = name[:i]
+	}
+	i = strings.LastIndexByte(name, '(')
+	if i >= 0 {
+		name = name[i:]
+	}
+	name = removeBrackets(name)
+	i = strings.LastIndexByte(name, '.')
 	if i >= 0 {
 		name = name[i+1:]
 	}
