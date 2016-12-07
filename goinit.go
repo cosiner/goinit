@@ -8,19 +8,27 @@ import (
 	"strings"
 )
 
+const (
+	_STATUS_WAITING = iota + 1
+	_STATUS_DONE
+)
+
 type Loader struct {
-	status    interface{}
-	refStatus reflect.Value
-	typeError reflect.Type
-	dones     map[string]struct{}
+	status       interface{}
+	refStatus    reflect.Value
+	typeError    reflect.Type
+	actionStatus map[string]int
+
+	hooks []func(string, bool)
 }
 
-func NewLoader(status interface{}) *Loader {
+func NewLoader(status interface{}, hooks ...func(name string, done bool)) *Loader {
 	return &Loader{
-		status:    status,
-		refStatus: reflect.ValueOf(status),
-		typeError: reflect.TypeOf((*error)(nil)).Elem(),
-		dones:     make(map[string]struct{}),
+		status:       status,
+		refStatus:    reflect.ValueOf(status),
+		typeError:    reflect.TypeOf((*error)(nil)).Elem(),
+		actionStatus: make(map[string]int),
+		hooks:        hooks,
 	}
 }
 
@@ -100,17 +108,30 @@ func (l *Loader) doFunc(act interface{}) error {
 	return nil
 }
 
+func (l *Loader) runHook(name string, isDone bool) {
+	for _, hook := range l.hooks {
+		hook(name, isDone)
+	}
+}
+
 func (l *Loader) do(act interface{}) error {
 	name := l.actionName(act)
-	if _, has := l.dones[name]; has {
+	stat := l.actionStatus[name]
+	switch stat {
+	case _STATUS_DONE:
 		return nil
+	case _STATUS_WAITING:
+		return fmt.Errorf("Cycle dependices occurred: %s", name)
 	}
 
+	l.actionStatus[name] = _STATUS_WAITING
+	l.runHook(name, false)
 	err := l.doFunc(act)
 	if err != nil {
 		return fmt.Errorf("%s: %s", name, err.Error())
 	}
-	l.dones[name] = struct{}{}
+	l.actionStatus[name] = _STATUS_DONE
+	l.runHook(name, true)
 	return nil
 }
 
