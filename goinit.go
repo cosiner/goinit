@@ -20,6 +20,8 @@ type Loader struct {
 	actionStatus map[string]int
 
 	hooks []func(string, bool)
+
+	lasts map[string]func() error
 }
 
 func NewLoader(status interface{}, hooks ...func(name string, done bool)) *Loader {
@@ -140,6 +142,23 @@ func (l *Loader) Deps(actions ...interface{}) error {
 		err := l.do(act)
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (l *Loader) Last(name string, fn func() error) {
+	if l.lasts == nil {
+		l.lasts = make(map[string]func() error)
+	}
+	l.lasts[name] = fn
+}
+
+func (l *Loader) Done() error {
+	for name, last := range l.lasts {
+		err := last()
+		if err != nil {
+			return fmt.Errorf("loader: run last action %s failed: %s", name, err.Error())
 		}
 	}
 	return nil
