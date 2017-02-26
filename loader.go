@@ -8,11 +8,7 @@ import (
 	"strings"
 )
 
-const (
-	_STATUS_WAITING = iota + 1
-	_STATUS_DONE
-)
-
+// Loader holds the action initial states
 type Loader struct {
 	status       interface{}
 	refStatus    reflect.Value
@@ -24,6 +20,8 @@ type Loader struct {
 	lasts map[string]func() error
 }
 
+// NewLoader create a loader, the status variable will be passed to actions if needed,
+// hooks will be runned before and after each action.
 func NewLoader(status interface{}, hooks ...func(name string, done bool)) *Loader {
 	return &Loader{
 		status:       status,
@@ -34,6 +32,7 @@ func NewLoader(status interface{}, hooks ...func(name string, done bool)) *Loade
 	}
 }
 
+// actionName resolve action name
 func (l *Loader) actionName(act interface{}) string {
 	name := runtime.FuncForPC(reflect.ValueOf(act).Pointer()).Name()
 	i := strings.LastIndexByte(name, '-')
@@ -117,22 +116,27 @@ func (l *Loader) runHook(name string, isDone bool) {
 }
 
 func (l *Loader) do(act interface{}) error {
+	const (
+		statusWaiting = iota + 1
+		statusDone
+	)
+
 	name := l.actionName(act)
 	stat := l.actionStatus[name]
 	switch stat {
-	case _STATUS_DONE:
+	case statusDone:
 		return nil
-	case _STATUS_WAITING:
+	case statusWaiting:
 		return fmt.Errorf("Cycle dependices occurred: %s", name)
 	}
 
-	l.actionStatus[name] = _STATUS_WAITING
+	l.actionStatus[name] = statusWaiting
 	l.runHook(name, false)
 	err := l.doFunc(act)
 	if err != nil {
 		return fmt.Errorf("%s: %s", name, err.Error())
 	}
-	l.actionStatus[name] = _STATUS_DONE
+	l.actionStatus[name] = statusDone
 	l.runHook(name, true)
 	return nil
 }
